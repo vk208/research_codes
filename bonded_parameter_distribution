@@ -1,0 +1,62 @@
+#################################
+##Bonded Parameter Distribution##
+#################################
+
+#GROMACS to histograms
+
+
+
+#read .xvg files first
+files2 = [f for f in os.listdir('/.../angles_avg/') if f.endswith('.xvg')]
+path2 = '/.../angles_avg/'
+groups_dict2 = dict()
+for file in files2:
+        name2 = file.split('.')[0]
+  
+with open(path2 + str(file)) as f:
+        angles = list()
+        freqs = list()
+        
+for line in f:
+        if (not (line.lstrip().startswith('#')) and not ((line.lstrip().startswith('@')))):
+                cols = line.split() 
+        if len(cols)==2:
+                angles.append(float(cols[0]))
+                freqs.append(float(cols[1]))     
+groups_dict2[name2]=(angles,freqs)  
+
+#zip it into a python dictionary 
+groups_dict2_avg ={}
+key,values = list(zip(*groups_dict2.items()))
+
+#zip averages into python dictionary 
+for i in range(len(groups_dict2)):   
+        x = key[i]    
+groups_dict2_avg[x] = sum(groups_dict2.get(x)[1])/(float(len(groups_dict2.get(x)[1])))
+keys, values = list(zip(*groups_dict2_avg.items()))
+values = list(values)
+
+#truncate to 3 floats 
+for i in range(len(values)):    
+        values[i] = float("%.3f" % values[i])
+
+#get histogram info 
+a, bins = np.histogram(values, bins='auto')
+mids = 0.5*(bins[1:] + bins[:-1])
+mean = np.average(mids, weights=a)
+var = np.average((mids - mean)**2, weights=a)
+std = np.sqrt(var)
+
+#plot the histogram 
+fig = plt.figure()
+plt.hist(values, bins='auto', edgecolor='black', linewidth=1.2)
+plt.axvline(x=np.mean(values)-np.std(values), ls = "--", color='#ffa500', alpha=1)
+plt.axvline(x=np.mean(values)+np.std(values), ls = "--", color='#ffa500', alpha=1)
+patch1 = mpatches.Patch(color='#ffa500', label='standard deviation')
+plt.axvline(x=np.mean(values), ls = "--", color = '#ffff00', alpha = 1)
+patch2 = mpatches.Patch(color='#ffff00', label='mean')
+plt.title('Average angle distribution')
+plt.legend(handles=[patch1, patch2], loc='upper left')
+plt.show()
+
+fig.savefig('---.png', bbox_inches='tight') #insert name for PNG file 
