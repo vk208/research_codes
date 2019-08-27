@@ -1,0 +1,87 @@
+####################
+##Make Index Files##
+####################
+
+#To create SLURM submission scripts for the "gmx make_ndx" command
+
+#define a txt to csv function
+def txt_to_csv(infile,outfile):
+    with open(infile,'r') as f:
+        lines = list()
+        m = f.readlines()
+        for l in m:
+            l = re.sub(' +',',',l)
+            l = re.sub(',,',',',l)
+            l = re.sub('\t',',',l)
+            lines.append(l)
+    with open(outfile,'w') as f:
+        f.writelines(lines) 
+
+#how many atoms are in this molecule?
+N = 156
+
+#make a csv 
+
+txt_to_csv('molecule_bonds.txt','molecule_bonds_test.csv')
+
+#reopen that bonds csv file
+f = open("molecule_bonds_test.csv", "r")
+contents = f.readlines()
+f.close()
+#create a header
+contents.insert(0, 'ai,aj\n')
+#insert the header in a new csv file
+f = open("molecule_bonds.csv", "w")
+contents = "".join(contents)
+f.write(contents)
+f.close()
+
+#open the correct files (make sure the csv files have headers in their own line before this)
+molecule_bonds = pd.read_csv("molecule_bonds.csv")
+
+#split bonds into corresponding lists
+b_ai = list()
+b_aj = list()
+for i in range(molecule_bonds.shape[0]):
+    b_ai.append(molecule_bonds.iloc[:,0][i])
+    b_aj.append(molecule_bonds.iloc[:,1][i])
+
+#write the files 
+f = open('bonds.txt','w')
+for i in range(N):
+    f.write('a %d \n' %(i+1))
+    f.write('name %d b%d\n' %((i+6),(i+1)))
+f.write('q')
+f.close()
+
+#write the SLURM submission script for GROMACS
+f = open('bonds.submit','w')
+#basic bash info for SLURM 
+f.write('#!/bin/bash \n')
+f.write('#SBATCH -N 1\n')                                                   #number of nodes
+f.write('#SBATCH -n 1\n')                                                   #number of cores
+f.write('#SBATCH --output=rnt.out\n')                                       #output file name
+f.write('#SBATCH --error=rnt.err\n')                                        #error file name
+f.write('#SBATCH -J rnt\n')                                                 #job name
+f.write('#SBATCH -p hung\n')                                                #partition name
+f.write('#SBATCH --workdir=/scratch/.../oplsaa_sims\n')                     #working directory
+f.write('\nmodule purge \n')                                                #unload all modules
+f.write('module load openmpi/3.1.1\n')                                      #load open MPI 
+f.write('module load gromacs/5.1.4\n')                                      #load GROMACS
+f.write('\nsource /shared/.../bin/GMXRC\n\n')                               #GROMACS source folder
+for i in range(len(b_ai)): 
+    #the command to calculate the distances 
+    f.write("mpirun -n 1 gmx_mpi distance -f production.xtc -s production.gro -n index_bonds.ndx -oav b%d.xvg -select 'com of group b%d plus com of group b%d'\n" 
+           %((i+1),b_ai[i],b_aj[i])) 
+f.close() 
+
+
+#for angles and dihedrals, it's easier to do this: 
+
+f.write('XTC=/scratch/.../oplsaa_sims/production.xtc\n')
+f.write('INDEX=/scratch/.../oplsaa_sims/index_angles.ndx\n\n') 
+
+#after GROMACS is sourced and then include this in a for loop
+f.write("mpirun -n 1 gmx_mpi angle -f $XTC -n $INDEX -ov dihedral%d.xvg -type dihedral <<EOF\n" %(i+1))  
+f.write('%d\n' %(i+1))
+f.write('EOF\n')
